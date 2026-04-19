@@ -1,0 +1,161 @@
+// Jarvis dashboard schema — MVP
+// SQLite locally, designed to migrate cleanly to Postgres later.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ---- Core user ----
+// We use Clerk for auth. `clerkId` is the external id. In dev mode (no Clerk
+// keys) a single "dev-user" row is lazily created so the app is usable out of
+// the box.
+model User {
+  id        String   @id @default(cuid())
+  clerkId   String   @unique
+  email     String?
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  chats        Chat[]
+  tasks        Task[]
+  notes        Note[]
+  memories     Memory[]
+  workflows    Workflow[]
+  workflowRuns WorkflowRun[]
+  usageEvents  UsageEvent[]
+}
+
+// ---- Chat / messages ----
+model Chat {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String?
+  summary   String?  // rolling short summary used to keep prompt context tiny
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@index([userId, updatedAt])
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  chatId    String
+  role      String   // "user" | "assistant" | "system" | "tool"
+  content   String
+  toolName  String?
+  toolInput String?  // JSON string
+  tokensIn  Int?
+  tokensOut Int?
+  createdAt DateTime @default(now())
+
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId, createdAt])
+}
+
+// ---- Tasks ----
+model Task {
+  id          String    @id @default(cuid())
+  userId      String
+  title       String
+  notes       String?
+  priority    String    @default("normal") // "low" | "normal" | "high"
+  status      String    @default("open")   // "open" | "done"
+  dueAt       DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, dueAt])
+}
+
+// ---- Notes ----
+model Note {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  tags      String   @default("") // comma-separated for SQLite simplicity
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, updatedAt])
+}
+
+// ---- Memory (long-term) ----
+// Retrieved selectively — never dump the whole store into the model.
+model Memory {
+  id         String   @id @default(cuid())
+  userId     String
+  kind       String   // "preference" | "fact" | "project" | "style" | "context"
+  key        String   // short label, e.g. "writing_tone"
+  value      String
+  importance Int      @default(1) // 1..5
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, kind])
+}
+
+// ---- Workflows / automations ----
+model Workflow {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  trigger     String   @default("manual") // "manual" | "schedule" | "webhook"
+  config      String   @default("{}")     // JSON string
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  runs WorkflowRun[]
+}
+
+model WorkflowRun {
+  id         String    @id @default(cuid())
+  userId     String
+  workflowId String
+  status     String    @default("success") // "success" | "error" | "running"
+  output     String?
+  error      String?
+  startedAt  DateTime  @default(now())
+  endedAt    DateTime?
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId, startedAt])
+}
+
+// ---- Usage telemetry (token-efficiency watchdog) ----
+model UsageEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  kind      String   // "chat" | "tool" | "summary"
+  provider  String?  // "anthropic" | "openai" | "local"
+  model     String?
+  tokensIn  Int      @default(0)
+  tokensOut Int      @default(0)
+  costUsd   Float    @default(0)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
