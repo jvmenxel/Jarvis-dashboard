@@ -10,6 +10,8 @@ const isPublic = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/api/health",
+  "/api/briefings/webhook", // signed via X-Jarvis-Secret
+  "/api/briefings/slack",   // Vercel Cron GET uses Authorization Bearer CRON_SECRET
 ]);
 
 const withClerk = clerkMiddleware(async (auth, req) => {

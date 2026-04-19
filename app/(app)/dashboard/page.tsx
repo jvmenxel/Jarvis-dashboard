@@ -5,16 +5,37 @@ import { getDashboardSummary } from "@/lib/tools";
 import { formatRelative, formatAgo } from "@/lib/utils";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, ListChecks, NotebookPen, Brain, MessagesSquare } from "lucide-react";
+import { prisma } from "@/lib/db";
+import { parseSections, todayKey } from "@/lib/briefings";
+import { BriefingCard } from "@/components/briefing/BriefingCard";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   const userId = await getCurrentUserId();
-  const { openTasks, doneToday, recentNotes, recentChats, recentMemories } =
-    await getDashboardSummary(userId);
+  const [summary, briefingRow] = await Promise.all([
+    getDashboardSummary(userId),
+    prisma.briefing.findUnique({
+      where: { userId_date: { userId, date: todayKey() } },
+    }),
+  ]);
+  const { openTasks, doneToday, recentNotes, recentChats, recentMemories } = summary;
+  const briefing = briefingRow
+    ? {
+        id: briefingRow.id,
+        date: briefingRow.date,
+        source: briefingRow.source,
+        sections: parseSections(briefingRow.sections),
+        updatedAt: briefingRow.updatedAt.toISOString(),
+      }
+    : null;
+  const slackConfigured = Boolean(
+    process.env.SLACK_USER_TOKEN && process.env.SLACK_BRIEFING_CHANNEL
+  );
 
   return (
     <div className="p-6 md:p-8 max-w-6xl mx-auto space-y-6">
+      <BriefingCard initial={briefing} slackConfigured={slackConfigured} />
       {/* Stats row */}
       <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Stat icon={<ListChecks className="size-4" />} label="Open tasks" value={openTasks.length} href="/tasks" />
