@@ -6,7 +6,7 @@ import { formatRelative, formatAgo } from "@/lib/utils";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, ListChecks, NotebookPen, Brain, MessagesSquare } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { parseSections, todayKey } from "@/lib/briefings";
+import { parseSections } from "@/lib/briefings";
 import { BriefingCard } from "@/components/briefing/BriefingCard";
 
 export const dynamic = "force-dynamic";
@@ -15,8 +15,11 @@ export default async function DashboardPage() {
   const userId = await getCurrentUserId();
   const [summary, briefingRow] = await Promise.all([
     getDashboardSummary(userId),
-    prisma.briefing.findUnique({
-      where: { userId_date: { userId, date: todayKey() } },
+    // Show the latest briefing regardless of day — Monday-only cadences
+    // should still display all week until the next one arrives.
+    prisma.briefing.findFirst({
+      where: { userId },
+      orderBy: { date: "desc" },
     }),
   ]);
   const { openTasks, doneToday, recentNotes, recentChats, recentMemories } = summary;

@@ -4,14 +4,21 @@
 import { NextResponse } from "next/server";
 import { getCurrentUserId } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { ingestBriefing, todayKey, IngestInput, parseSections } from "@/lib/briefings";
+import { ingestBriefing, IngestInput, parseSections } from "@/lib/briefings";
 
 export async function GET(req: Request) {
   const userId = await getCurrentUserId();
-  const date = new URL(req.url).searchParams.get("date") ?? todayKey();
-  const row = await prisma.briefing.findUnique({
-    where: { userId_date: { userId, date } },
-  });
+  const dateParam = new URL(req.url).searchParams.get("date");
+  // When a specific date is requested, fetch that one; otherwise return the
+  // latest briefing (so a Monday-only feed stays visible all week).
+  const row = dateParam
+    ? await prisma.briefing.findUnique({
+        where: { userId_date: { userId, date: dateParam } },
+      })
+    : await prisma.briefing.findFirst({
+        where: { userId },
+        orderBy: { date: "desc" },
+      });
   return NextResponse.json({
     briefing: row
       ? { ...row, sections: parseSections(row.sections) }
