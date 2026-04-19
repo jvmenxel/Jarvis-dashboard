@@ -138,44 +138,37 @@ The AI layer is a thin `generate({ size, system, messages })` function in
 
 ---
 
+## Database (Postgres via Neon)
+
+The app uses Postgres through [Neon](https://neon.tech)'s serverless HTTP
+driver. Same URL works locally and on Vercel.
+
+1. Sign up at <https://console.neon.tech> (free forever tier).
+2. Copy the **Pooled connection** string from your project dashboard.
+3. Paste it into `.env`:
+   ```env
+   DATABASE_URL="postgresql://user:pass@ep-xyz.neon.tech/neondb?sslmode=require"
+   ```
+4. `npx prisma migrate dev --name init` — creates the schema in your Neon DB.
+
+Vercel Postgres is Neon under the hood, so the same adapter and URL format
+work if you'd rather provision the DB from the Vercel dashboard.
+
+---
+
 ## Deploying to Vercel
 
 1. Push to GitHub.
 2. Import the repo on <https://vercel.com/new>.
-3. Set env vars:
-   - `DATABASE_URL` — **not** SQLite on Vercel (serverless has no writable
-     disk). Swap to Postgres (Vercel Postgres, Neon, Supabase, Turso):
-     ```env
-     DATABASE_URL="postgresql://user:pass@host:5432/jarvis"
-     ```
-     Then change `prisma/schema.prisma` → `provider = "postgresql"` and
-     run `npx prisma migrate deploy` on CI.
-   - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` — optional.
-   - `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` — optional.
-4. Deploy. `npm run build` already passes locally.
+3. Set env vars (same as `.env.example`):
+   - `DATABASE_URL` — your Neon pooled connection string.
+   - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` — from Clerk dashboard.
+   - `ANTHROPIC_API_KEY` and/or `OPENAI_API_KEY` — optional.
+4. Deploy. `npm run build` already passes. The build step runs
+   `prisma generate` via a `postinstall` hook, so no extra CI config is needed.
 
-For a **zero-auth demo deploy**, skip Clerk keys and the dev fallback user
-stays active — useful for internal previews, not for public exposure.
-
----
-
-## Migrating SQLite → Postgres
-
-1. Provision a Postgres DB.
-2. `DATABASE_URL="postgresql://..."` in `.env`.
-3. In `prisma/schema.prisma`, change:
-   ```prisma
-   datasource db {
-     provider = "postgresql"
-   }
-   ```
-4. Remove the SQLite adapter import in `lib/db.ts` (switch back to a
-   default `new PrismaClient()` with no adapter, or use the Postgres driver
-   adapter if you're on Prisma 7+).
-5. `npx prisma migrate dev --name postgres-init` to regenerate migrations.
-
-The schema itself is portable — all indexes, cuid IDs, and relations are
-Postgres-safe.
+For a **zero-auth preview deploy**, skip Clerk keys and the dev fallback user
+stays active — useful for internal previews, not public exposure.
 
 ---
 
