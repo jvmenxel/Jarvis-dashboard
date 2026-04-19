@@ -79,12 +79,12 @@ export default async function SettingsPage() {
         <Card>
           <CardHeader><CardTitle>Database</CardTitle></CardHeader>
           <CardBody className="pt-0 space-y-2 text-sm">
-            <Row label="Driver" value="SQLite (Prisma)" />
+            <Row label="Driver" value="Postgres · Neon serverless (Prisma)" />
             <Row
-              label="URL"
-              value={<code className="text-xs">{process.env.DATABASE_URL}</code>}
+              label="Host"
+              value={<code className="text-xs break-all">{dbHost()}</code>}
             />
-            <Row label="Deploy target" value="Vercel + swap to Postgres when ready" />
+            <Row label="Deploy target" value="Vercel" />
           </CardBody>
         </Card>
 
@@ -175,4 +175,16 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
       <span className="text-right">{value}</span>
     </div>
   );
+}
+
+// Extract just the hostname from DATABASE_URL so we never render the
+// password on the settings page.
+function dbHost() {
+  const url = process.env.DATABASE_URL;
+  if (!url) return "—";
+  try {
+    return new URL(url).host;
+  } catch {
+    return "unparseable";
+  }
 }
