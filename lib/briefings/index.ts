@@ -73,6 +73,40 @@ export async function ingestBriefing(
   return { briefing: saved, reused: false };
 }
 
+// Strip Slack window chrome and isolate the most recent briefing. Users who
+// ⌘A an entire Slack window paste in sidebar labels, search placeholders,
+// multiple past briefings, and the input field. We want just today's.
+export function extractLatestBriefing(raw: string): string {
+  const text = raw.replace(/\r\n/g, "\n");
+
+  // Known end-of-briefing markers from Cowork.
+  const endMarkers = [
+    "Briefing generated automatically by Claude",
+    "Sent using @Claude",
+  ];
+  let endIdx = text.length;
+  for (const m of endMarkers) {
+    const i = text.lastIndexOf(m);
+    if (i !== -1 && i < endIdx) endIdx = i + m.length;
+  }
+
+  // Start markers — prefer the most recent one before endIdx.
+  const startMarkers = [
+    /Good morning,?\s+\w+/gi,
+    /Here'?s your briefing/gi,
+    /Morning Briefing\b/gi,
+  ];
+  let startIdx = -1;
+  for (const rx of startMarkers) {
+    let m: RegExpExecArray | null;
+    while ((m = rx.exec(text)) !== null) {
+      if (m.index < endIdx && m.index > startIdx) startIdx = m.index;
+    }
+  }
+  if (startIdx === -1) return raw.trim(); // no markers → leave as-is
+  return text.slice(startIdx, endIdx).trim();
+}
+
 // Turn raw briefing text into {agenda, pipeline, highlights, actions}.
 // Uses Claude Haiku. If no provider is configured we fall back to a
 // deterministic heuristic so the dashboard still shows something useful.
@@ -80,8 +114,9 @@ export async function parseBriefing(
   userId: string,
   raw: string
 ): Promise<BriefingSections> {
+  const cleaned = extractLatestBriefing(raw);
   if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY) {
-    return heuristicParse(raw);
+    return heuristicParse(cleaned);
   }
   const system = [
     "You turn a morning executive-assistant briefing into strict JSON.",
@@ -99,12 +134,12 @@ export async function parseBriefing(
     userId,
     size: "small",
     system,
-    messages: [{ role: "user", content: raw.slice(0, 6000) }],
+    messages: [{ role: "user", content: cleaned.slice(0, 6000) }],
     maxOutputTokens: 700,
   });
 
   const parsed = tryJson(result.content);
-  if (!parsed) return heuristicParse(raw);
+  if (!parsed) return heuristicParse(cleaned);
   return sanitize(parsed);
 }
 
